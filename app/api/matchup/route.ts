@@ -3,6 +3,7 @@ import { buildLeagueModel } from "@/lib/analytics";
 import { predictMatchup } from "@/lib/model";
 import { getInjuries, getSchedule } from "@/lib/espn";
 import { computeInjuryImpact } from "@/lib/injuries";
+import { buildTeamPlayers } from "@/lib/lineup";
 import { getOddsForMatchup } from "@/lib/odds";
 
 export async function GET(req: NextRequest) {
@@ -41,6 +42,10 @@ export async function GET(req: NextRequest) {
 
     const injuries = await getInjuries().catch(() => ({} as Record<string, never[]>));
     const odds = await getOddsForMatchup(home.displayName, away.displayName, prediction.homeWinProb);
+    const [homePlayers, awayPlayers] = await Promise.all([
+      buildTeamPlayers(homeId),
+      buildTeamPlayers(awayId),
+    ]);
 
     return NextResponse.json({
       home,
@@ -50,6 +55,7 @@ export async function GET(req: NextRequest) {
       prediction,
       headToHead: h2h,
       injuries: { home: injuries[homeId] ?? [], away: injuries[awayId] ?? [] },
+      players: { home: homePlayers, away: awayPlayers },
       odds,
     });
   } catch (e: any) {
