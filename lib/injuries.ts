@@ -1,8 +1,19 @@
 import { getInjuries, getTeamScoring, Injury } from "./espn";
 
+export type InjuredPlayer = {
+  id: string;
+  name: string;
+  position: string;
+  ppg: number;
+  status: string;
+  impact: number;
+  headshot: string;
+};
+
 export type InjuryImpact = {
   penalty: number;
   notes: string[];
+  players: InjuredPlayer[];
 };
 
 export async function computeInjuryImpact(teamId: string, teamAbbr: string): Promise<InjuryImpact> {
@@ -13,11 +24,12 @@ export async function computeInjuryImpact(teamId: string, teamAbbr: string): Pro
     injuries = all[teamId] ?? [];
     scoring = await getTeamScoring(teamId);
   } catch {
-    return { penalty: 0, notes: [] };
+    return { penalty: 0, notes: [], players: [] };
   }
 
   let penalty = 0;
   const notes: string[] = [];
+  const players: InjuredPlayer[] = [];
 
   for (const inj of injuries) {
     const ppg = scoring[inj.athleteId];
@@ -32,7 +44,18 @@ export async function computeInjuryImpact(teamId: string, teamAbbr: string): Pro
     const hit = ppg * weight;
     penalty += hit;
     notes.push(`${inj.athlete} (${ppg.toFixed(1)} ppg) is ${inj.status}${status === "out" ? "" : ", partial weight applied"} costing ${teamAbbr} an estimated ${hit.toFixed(1)} points`);
+    players.push({
+      id: inj.athleteId,
+      name: inj.athlete,
+      position: inj.position,
+      ppg,
+      status: inj.status,
+      impact: hit,
+      headshot: `https://a.espncdn.com/i/headshots/nba/players/full/${inj.athleteId}.png`,
+    });
   }
 
-  return { penalty: Math.min(penalty, 7), notes };
+  players.sort((a, b) => b.impact - a.impact);
+
+  return { penalty: Math.min(penalty, 7), notes, players };
 }
