@@ -122,6 +122,52 @@ export async function getTeamScoring(teamId: string): Promise<Record<string, num
   });
 }
 
+export type RosterPlayer = { id: string; name: string; position: string; jersey: string; headshot: string };
+
+export async function getTeamRoster(teamId: string): Promise<RosterPlayer[]> {
+  return cached(`roster_${teamId}`, 12 * HOUR, async () => {
+    const data = await get(`${BASE}/teams/${teamId}/roster`);
+    return (data.athletes ?? []).map((a: any) => ({
+      id: String(a.id),
+      name: a.displayName ?? "Unknown",
+      position: a.position?.abbreviation ?? "",
+      jersey: a.jersey ?? "",
+      headshot: a.headshot?.href ?? `https://a.espncdn.com/i/headshots/nba/players/full/${a.id}.png`,
+    }));
+  });
+}
+
+export type TeamLeaders = Record<string, { ppg: number; rpg: number; apg: number; mpg: number }>;
+
+export async function getTeamLeaders(teamId: string): Promise<TeamLeaders> {
+  return cached(`leaders_${teamId}`, 12 * HOUR, async () => {
+    const data = await get(
+      `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2026/types/2/teams/${teamId}/leaders`
+    );
+    const maps: Record<string, Record<string, number>> = {};
+    for (const catName of ["pointsPerGame", "reboundsPerGame", "assistsPerGame", "minutesPerGame"]) {
+      const cat = (data.categories ?? []).find((c: any) => c.name === catName);
+      const m: Record<string, number> = {};
+      for (const l of cat?.leaders ?? []) {
+        const ref: string = l.athlete?.$ref ?? "";
+        const mm = ref.match(/athletes\/(\d+)/);
+        if (mm) m[mm[1]] = Number(l.value);
+      }
+      maps[catName] = m;
+    }
+    const out: TeamLeaders = {};
+    for (const id of Object.keys(maps.minutesPerGame ?? {})) {
+      out[id] = {
+        ppg: maps.pointsPerGame?.[id] ?? 0,
+        rpg: maps.reboundsPerGame?.[id] ?? 0,
+        apg: maps.assistsPerGame?.[id] ?? 0,
+        mpg: maps.minutesPerGame?.[id] ?? 0,
+      };
+    }
+    return out;
+  });
+}
+
 export type UpcomingGame = {
   gameId: string;
   date: string;
